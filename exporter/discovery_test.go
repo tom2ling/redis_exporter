@@ -1,60 +1,48 @@
 package exporter
 
 import (
-	"log"
 	"testing"
+
+	log "github.com/sirupsen/logrus"
 )
 
-func cmpStringArrays(a1, a2 []string) bool {
-	if len(a1) != len(a2) {
-		return false
-	}
-	for n := range a1 {
-		if a1[n] != a2[n] {
-			return false
-		}
-	}
-	return true
-}
-
-func TestLoadRedisArgs(t *testing.T) {
-	log.Println("TestLoadRedisArgs()")
+func TestLoadCommandLineArgs(t *testing.T) {
 	tests := []struct {
-		addr, pwd, alias, sep           string
-		wantAddr, wantPwds, wantAliases []string
+		addr, pwd, alias, sep            string
+		wantAddrs, wantPwds, wantAliases []string
 	}{
 		{
 			addr:        "",
 			sep:         ",",
-			wantAddr:    []string{"redis://localhost:6379"},
+			wantAddrs:   []string{"redis://localhost:6379"},
 			wantPwds:    []string{""},
 			wantAliases: []string{""},
 		},
 		{
 			addr:        "redis://localhost:6379",
 			sep:         ",",
-			wantAddr:    []string{"redis://localhost:6379"},
+			wantAddrs:   []string{"redis://localhost:6379"},
 			wantPwds:    []string{""},
 			wantAliases: []string{""},
 		},
 		{
 			addr:        "redis://localhost:6379,redis://localhost:7000",
 			sep:         ",",
-			wantAddr:    []string{"redis://localhost:6379", "redis://localhost:7000"},
+			wantAddrs:   []string{"redis://localhost:6379", "redis://localhost:7000"},
 			wantPwds:    []string{"", ""},
 			wantAliases: []string{"", ""},
 		},
 		{
 			addr:        "redis://localhost:6379,redis://localhost:7000,redis://localhost:7001",
 			sep:         ",",
-			wantAddr:    []string{"redis://localhost:6379", "redis://localhost:7000", "redis://localhost:7001"},
+			wantAddrs:   []string{"redis://localhost:6379", "redis://localhost:7000", "redis://localhost:7001"},
 			wantPwds:    []string{"", "", ""},
 			wantAliases: []string{"", "", ""},
 		},
 		{
 			alias:       "host-1",
 			sep:         ",",
-			wantAddr:    []string{"redis://localhost:6379"},
+			wantAddrs:   []string{"redis://localhost:6379"},
 			wantPwds:    []string{""},
 			wantAliases: []string{"host-1"},
 		},
@@ -62,39 +50,78 @@ func TestLoadRedisArgs(t *testing.T) {
 
 	for _, test := range tests {
 		sep := test.sep
-		addrs, pwds, aliases := LoadRedisArgs(test.addr, test.pwd, test.alias, sep)
-		if !cmpStringArrays(addrs, test.wantAddr) {
-			t.Errorf("addrs not matching wantAliases, got: %v   want: %v", addrs, test.wantAddr)
-		}
-		if !cmpStringArrays(pwds, test.wantPwds) {
-			t.Errorf("pwds not matching wantAliases, got: %v   want: %v", pwds, test.wantPwds)
-		}
-		if !cmpStringArrays(aliases, test.wantAliases) {
-			t.Errorf("aliases not matching wantAliases, got: %v   want: %v", aliases, test.wantAliases)
-		}
+		hosts := LoadCommandLineArgs(test.addr, test.pwd, test.alias, sep)
+		checkHosts(
+			t, hosts,
+			test.wantAddrs,
+			test.wantPwds,
+			test.wantAliases)
 	}
 }
 
 func TestLoadRedisFile(t *testing.T) {
-	if _, _, _, err := LoadRedisFile("doesnt-exist.txt"); err == nil {
+	if _, err := LoadRedisFile("doesnt-exist.txt"); err == nil {
 		t.Errorf("should have failed opening non existing file")
 		return
 	}
 
-	addrs, pwds, aliases, err := LoadRedisFile("../contrib/sample_redis_hosts_file.txt")
+	hosts, err := LoadRedisFile("../contrib/sample_redis_hosts_file.txt")
 	if err != nil {
 		t.Errorf("LoadRedisFile() failed, err: %s", err)
 		return
 	}
-	log.Printf("aliases: %v \n", aliases)
-	if !cmpStringArrays(addrs, []string{"redis://localhost:6379", "redis://localhost:7000", "redis://localhost:7000"}) {
-		t.Errorf("addrs not matching want")
+
+	log.Debugf("hosts: %v \n", hosts)
+
+	checkHosts(
+		t, hosts,
+		[]string{"redis://localhost:6379", "redis://localhost:7000", "redis://localhost:7000"},
+		[]string{"", "password", "second-pwd"},
+		[]string{"", "alias", ""},
+	)
+}
+
+func checkHosts(t *testing.T, hosts []RedisHost, addrs, pwds, aliases []string) {
+	for _, addr := range addrs {
+		found := false
+		for _, host := range hosts {
+			if host.Addr == addr {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Didn't find addr: %s, got hosts: %#v", addr, hosts)
+			return
+		}
 	}
-	if !cmpStringArrays(pwds, []string{"", "password", "second-pwd"}) {
-		t.Errorf("pwds not matching want")
+
+	for _, pwd := range pwds {
+		found := false
+		for _, host := range hosts {
+			if host.Password == pwd {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Didn't find pwd: %s, got hosts: %#v", pwd, hosts)
+			return
+		}
 	}
-	if !cmpStringArrays(aliases, []string{"", "alias", ""}) {
-		t.Errorf("aliases not matching want")
+
+	for _, alias := range aliases {
+		found := false
+		for _, host := range hosts {
+			if host.Alias == alias {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Didn't find alias: %s, got hosts: %#v", alias, hosts)
+			return
+		}
 	}
 }
 
