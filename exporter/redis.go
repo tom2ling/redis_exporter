@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	prom_strutil "github.com/prometheus/prometheus/util/strutil"
 	log "github.com/sirupsen/logrus"
 )
@@ -38,31 +40,30 @@ type keyInfo struct {
 
 // Exporter implements the prometheus.Exporter interface, and exports Redis metrics.
 type Exporter struct {
+	sync.Mutex
 	hosts      []RedisHost
 	namespace  string
 	keys       []dbKeyPair
 	singleKeys []dbKeyPair
 
-	totalScrapes prometheus.Counter
+	totalScrapes              prometheus.Counter
+	targetScrapeDuration      prometheus.Summary
+	targetScrapeRequestErrors prometheus.Counter
 
 	metricDescriptions map[string]*prometheus.Desc
 
-	options Options
-
+	options   Options
 	LuaScript []byte
-
-	sync.RWMutex
 }
 
-/*
-type scrapeResult struct {
-	Name  string
-	Value float64
-	Addr  string
-	Alias string
-	DB    string
+type Options struct {
+	Namespace              string
+	ConfigCommandName      string
+	CheckSingleKeys        string
+	CheckKeys              string
+	IncludeVerbotenMetrics bool
+	SkipTLSVerification    bool
 }
-*/
 
 var (
 	metricMapGauges = map[string]string{
@@ -173,6 +174,27 @@ var (
 	slaveInfoFields    = map[string]bool{"master_host": true, "master_port": true, "slave_read_only": true}
 )
 
+func (e *Exporter) ScrapeHandler(w http.ResponseWriter, r *http.Request) {
+	target := r.URL.Query().Get("target")
+	if target == "" {
+		http.Error(w, "'target' parameter must be specified", 400)
+		e.targetScrapeRequestErrors.Inc()
+		return
+	}
+
+	start := time.Now()
+	exp, _ := NewRedisExporter([]RedisHost{{Addr: target}}, e.options)
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(exp)
+	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
+
+	h.ServeHTTP(w, r)
+
+	duration := time.Since(start).Seconds()
+	e.targetScrapeDuration.Observe(duration)
+	log.Debugf("Scrape of target '%s' took %f seconds", target, duration)
+}
+
 // splitKeyArgs splits a command-line supplied argument into a slice of dbKeyPairs.
 func parseKeyArg(keysArgString string) (keys []dbKeyPair, err error) {
 	if keysArgString == "" {
@@ -201,21 +223,11 @@ func parseKeyArg(keysArgString string) (keys []dbKeyPair, err error) {
 	return keys, err
 }
 
-type Options struct {
-	Namespace              string
-	ConfigCommandName      string
-	CheckSingleKeys        string
-	CheckKeys              string
-	IncludeVerbotenMetrics bool
-	SkipTLSVerification    bool
-}
-
 func newMetricDescr(namespace string, metricName string, docString string, labels []string) *prometheus.Desc {
 	return prometheus.NewDesc(prometheus.BuildFQName(namespace, "", metricName), docString, labels, nil)
 }
 
 // NewRedisExporter returns a new exporter of Redis metrics.
-// note to self: next time we add an argument, instead add a RedisExporter struct
 func NewRedisExporter(hosts []RedisHost, opts Options) (*Exporter, error) {
 	e := Exporter{
 		hosts:     hosts,
@@ -227,6 +239,19 @@ func NewRedisExporter(hosts []RedisHost, opts Options) (*Exporter, error) {
 			Name:      "exporter_scrapes_total",
 			Help:      "Current total redis scrapes.",
 		}),
+
+		targetScrapeDuration: prometheus.NewSummary(
+			prometheus.SummaryOpts{
+				Name: "target_scrape_collection_duration_seconds",
+				Help: "Duration of collections by the SNMP exporter",
+			},
+		),
+		targetScrapeRequestErrors: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Name: "target_scrape_request_errors_total",
+				Help: "Errors in requests to the SNMP exporter",
+			},
+		),
 	}
 
 	if e.options.ConfigCommandName == "" {

@@ -121,6 +121,8 @@ func main() {
 		http.Handle(*metricPath, promhttp.Handler())
 	}
 
+	http.HandleFunc("/scrape", exp.ScrapeHandler)
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<html>
 <head><title>Redis Exporter v` + BuildVersion + `</title></head>

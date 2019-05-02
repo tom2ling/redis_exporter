@@ -1003,6 +1003,56 @@ func TestHTTPEndpoint(t *testing.T) {
 	}
 }
 
+func TestHTTPScrapeEndpoint(t *testing.T) {
+	r := prometheus.NewRegistry()
+	prometheus.DefaultGatherer = r
+	prometheus.DefaultRegisterer = r
+
+	e, _ := NewRedisExporter([]RedisHost{}, Options{Namespace: "test"})
+
+	setupDBKeys(t, os.Getenv("TEST_REDIS_URI"))
+	defer deleteKeysFromDB(t, os.Getenv("TEST_REDIS_URI"))
+	prometheus.Register(e)
+
+	ts := httptest.NewServer(http.HandlerFunc(e.ScrapeHandler))
+	defer ts.Close()
+
+	u := fmt.Sprintf(ts.URL+"/?target=%s", os.Getenv("TEST_REDIS_URI"))
+	body := downloadUrl(t, u)
+
+	wants := []string{
+		// metrics
+		`test_connected_clients`,
+		`test_commands_processed_total`,
+		`test_instance_info`,
+
+		"db_keys",
+		"db_avg_ttl_seconds",
+		"used_cpu_sys",
+		"loading_dump_file", // testing renames
+		"config_maxmemory",  // testing config extraction
+		"config_maxclients", // testing config extraction
+		"slowlog_length",
+		"slowlog_last_id",
+		"start_time_seconds",
+		"uptime_in_seconds",
+
+		// labels and label values
+		`addr="` + os.Getenv("TEST_REDIS_URI"),
+		`redis_mode`,
+		`standalone`,
+		`cmd="get"`,
+
+		`test_db_keys{addr="` + os.Getenv("TEST_REDIS_URI") + `",alias="",db="db11"} 11`,
+		`test_db_keys_expiring{addr="` + os.Getenv("TEST_REDIS_URI") + `",alias="",db="db11"} `,
+	}
+	for _, want := range wants {
+		if !strings.Contains(body, want) {
+			t.Errorf("want metrics to include %q, have:\n%s", want, body)
+		}
+	}
+}
+
 func TestNonExistingHost(t *testing.T) {
 	e, _ := NewRedisExporter([]RedisHost{{Addr: "unix:///tmp/doesnt.exist"}}, Options{Namespace: "test"})
 
