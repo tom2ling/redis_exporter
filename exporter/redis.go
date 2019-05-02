@@ -203,6 +203,7 @@ func parseKeyArg(keysArgString string) (keys []dbKeyPair, err error) {
 
 type Options struct {
 	Namespace              string
+	ConfigCommandName      string
 	CheckSingleKeys        string
 	CheckKeys              string
 	IncludeVerbotenMetrics bool
@@ -226,6 +227,10 @@ func NewRedisExporter(hosts []RedisHost, opts Options) (*Exporter, error) {
 			Name:      "exporter_scrapes_total",
 			Help:      "Current total redis scrapes.",
 		}),
+	}
+
+	if e.options.ConfigCommandName == "" {
+		e.options.ConfigCommandName = "CONFIG"
 	}
 
 	var err error
@@ -845,7 +850,7 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric, host RedisHost) 
 
 	dbCount := 0
 
-	if config, err := redis.Strings(c.Do("CONFIG", "GET", "*")); err == nil {
+	if config, err := redis.Strings(c.Do(e.options.ConfigCommandName, "GET", "*")); err == nil {
 		dbCount, err = e.extractConfigMetrics(ch, config, host)
 		if err != nil {
 			log.Errorf("Redis CONFIG err: %s", err)
@@ -898,7 +903,7 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric, host RedisHost) 
 			latencyResult := tempVal[0].([]interface{})
 			var spikeLast, spikeDuration, max int64
 			if _, err := redis.Scan(latencyResult, &eventName, &spikeLast, &spikeDuration, &max); err == nil {
-				spikeDuration = spikeDuration * 1000
+				spikeDuration = spikeDuration / 1e6
 				e.registerGaugeValue(ch, "latency_spike_last", float64(spikeLast), []string{host.Addr, host.Alias, eventName})
 				e.registerGaugeValue(ch, "latency_spike_seconds", float64(spikeDuration), []string{host.Addr, host.Alias, eventName})
 			}

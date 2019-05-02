@@ -49,6 +49,7 @@ func main() {
 		listenAddress       = flag.String("web.listen-address", getEnv("REDIS_EXPORTER_WEB_LISTEN_ADDRESS", ":9121"), "Address to listen on for web interface and telemetry.")
 		metricPath          = flag.String("web.telemetry-path", getEnv("REDIS_EXPORTER_WEB_TELEMETRY_PATH", "/metrics"), "Path under which to expose metrics.")
 		logFormat           = flag.String("log-format", getEnv("REDIS_EXPORTER_LOG_FORMAT", "txt"), "Log format, valid options are txt and json")
+		configCommand       = flag.String("config-command", getEnv("REDIS_EXPORTER_CONFIG_COMMAND", "CONFIG"), "What to use for the CONFIG command")
 		isDebug             = flag.Bool("debug", getEnvBool("REDIS_EXPORTER_DEBUG"), "Output verbose debug information")
 		showVersion         = flag.Bool("version", false, "Show version information and exit")
 		useCfBindings       = flag.Bool("use-cf-bindings", getEnvBool("REDIS_EXPORTER_USE-CF-BINDINGS"), "Use Cloud Foundry service bindings")
@@ -87,6 +88,7 @@ func main() {
 		hosts,
 		exporter.Options{
 			Namespace:              *namespace,
+			ConfigCommandName:      *configCommand,
 			CheckKeys:              *checkKeys,
 			CheckSingleKeys:        *checkSingleKeys,
 			IncludeVerbotenMetrics: *inclVerbotenMetrics,

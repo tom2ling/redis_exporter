@@ -6,6 +6,26 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func TestLoadRedisHosts(t *testing.T) {
+
+	// todo: moar tests
+
+	hosts, err := LoadRedisHosts("", "", "", "", ",", false)
+	if err != nil {
+		t.Errorf("Shouldn't have returned an error")
+	}
+
+	log.Printf("hosts: %#v", hosts)
+
+	if len(hosts) != 1 {
+		t.Errorf("Expected one host")
+	}
+
+	if hosts[0].Addr != "redis://localhost:6379" {
+		t.Errorf("Wrong Addr, got: %s", hosts[0].Addr)
+	}
+}
+
 func TestLoadCommandLineArgs(t *testing.T) {
 	tests := []struct {
 		addr, pwd, alias, sep            string
