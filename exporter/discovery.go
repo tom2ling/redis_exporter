@@ -71,7 +71,7 @@ func LoadRedisFile(fileName string) ([]RedisHost, error) {
 	for _, record := range records {
 		var addr, pwd string
 		switch len(record) {
-		case 2:
+		case 2,3:
 			addr = record[0]
 			pwd = record[1]
 		case 1:
