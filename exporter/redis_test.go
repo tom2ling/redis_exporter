@@ -1255,7 +1255,7 @@ func TestClusterMaster(t *testing.T) {
 	body := downloadURL(t, ts.URL+"/metrics")
 	log.Debugf("master - body: %s", body)
 	for _, want := range []string{
-		"test_instance_info{addr=\"redis://redis-cluster:7000\"",
+		"test_instance_info{",
 		"test_master_repl_offset",
 	} {
 		if !strings.Contains(body, want) {
@@ -1393,7 +1393,7 @@ func TestClusterSlave(t *testing.T) {
 	for _, want := range []string{
 		"test_instance_info",
 		"test_master_last_io_seconds",
-		"test_slave_info{addr=\"redis://redis-cluster:7005\",",
+		"test_slave_info",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("Did not find key [%s] \nbody: %s", want, body)
