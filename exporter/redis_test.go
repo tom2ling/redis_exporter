@@ -212,7 +212,7 @@ func TestTile38(t *testing.T) {
 		t.SkipNow()
 	}
 
-	e, _ := NewRedisExporter([]RedisHost{{Addr: os.Getenv("TEST_TILE38_URI"), Alias: "tile"}}, Options{Namespace: "test"})
+	e, _ := NewRedisExporter([]RedisHost{{Addr: os.Getenv("TEST_TILE38_URI")}}, Options{Namespace: "test"})
 
 	chM := make(chan prometheus.Metric)
 	go func() {
@@ -993,8 +993,8 @@ func TestHTTPEndpoint(t *testing.T) {
 		`standalone`,
 		`cmd="get"`,
 
-		`test_db_keys{addr="` + os.Getenv("TEST_REDIS_URI") + `",alias="",db="db11"} 11`,
-		`test_db_keys_expiring{addr="` + os.Getenv("TEST_REDIS_URI") + `",alias="",db="db11"} `,
+		`test_db_keys{addr="` + os.Getenv("TEST_REDIS_URI") + `",db="db11"} 11`,
+		`test_db_keys_expiring{addr="` + os.Getenv("TEST_REDIS_URI") + `",db="db11"} `,
 	}
 	for _, test := range tests {
 		if !strings.Contains(body, test) {
@@ -1043,8 +1043,8 @@ func TestHTTPScrapeEndpoint(t *testing.T) {
 		`standalone`,
 		`cmd="get"`,
 
-		`test_db_keys{addr="` + os.Getenv("TEST_REDIS_URI") + `",alias="",db="db11"} 11`,
-		`test_db_keys_expiring{addr="` + os.Getenv("TEST_REDIS_URI") + `",alias="",db="db11"} `,
+		`test_db_keys{addr="` + os.Getenv("TEST_REDIS_URI") + `",db="db11"} 11`,
+		`test_db_keys_expiring{addr="` + os.Getenv("TEST_REDIS_URI") + `",db="db11"} `,
 	}
 	for _, want := range wants {
 		if !strings.Contains(body, want) {
@@ -1242,7 +1242,7 @@ func TestClusterMaster(t *testing.T) {
 	defer ts.Close()
 
 	addr := os.Getenv("TEST_REDIS_CLUSTER_MASTER_URI")
-	e, _ := NewRedisExporter([]RedisHost{{Addr: addr, Alias: "master"}}, Options{Namespace: "test"})
+	e, _ := NewRedisExporter([]RedisHost{{Addr: addr}}, Options{Namespace: "test"})
 
 	prometheus.Register(e)
 
@@ -1255,7 +1255,7 @@ func TestClusterMaster(t *testing.T) {
 	body := downloadURL(t, ts.URL+"/metrics")
 	log.Debugf("master - body: %s", body)
 	for _, want := range []string{
-		"test_instance_info{addr=\"redis://redis-cluster:7000\",alias=\"master\"",
+		"test_instance_info{addr=\"redis://redis-cluster:7000\"",
 		"test_master_repl_offset",
 	} {
 		if !strings.Contains(body, want) {
@@ -1356,7 +1356,7 @@ func TestPasswordInvalid(t *testing.T) {
 		close(chM)
 	}()
 
-	want := `test_exporter_last_scrape_error{addr="` + os.Getenv("TEST_REDIS_URI") + `",alias="",err="dial redis: unknown network redis"} 1`
+	want := `test_exporter_last_scrape_error{addr="` + os.Getenv("TEST_REDIS_URI") + `",err="dial redis: unknown network redis"} 1`
 	body := downloadURL(t, ts.URL+"/metrics")
 	if !strings.Contains(body, want) {
 		t.Errorf(`error, expected string "%s" in body, got body: \n\n%s`, want, body)
@@ -1378,7 +1378,7 @@ func TestClusterSlave(t *testing.T) {
 	defer ts.Close()
 
 	addr := os.Getenv("TEST_REDIS_CLUSTER_SLAVE_URI")
-	e, _ := NewRedisExporter([]RedisHost{{Addr: addr, Alias: "slave"}}, Options{Namespace: "test"})
+	e, _ := NewRedisExporter([]RedisHost{{Addr: addr}}, Options{Namespace: "test"})
 
 	prometheus.Register(e)
 
@@ -1393,7 +1393,7 @@ func TestClusterSlave(t *testing.T) {
 	for _, want := range []string{
 		"test_instance_info",
 		"test_master_last_io_seconds",
-		"test_slave_info{addr=\"redis://redis-cluster:7005\",alias=\"slave\",",
+		"test_slave_info{addr=\"redis://redis-cluster:7005\",",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("Did not find key [%s] \nbody: %s", want, body)

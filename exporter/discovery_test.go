@@ -10,7 +10,7 @@ func TestLoadRedisHosts(t *testing.T) {
 
 	// todo: moar tests
 
-	hosts, err := LoadRedisHosts("", "", "", "", ",", false)
+	hosts, err := LoadRedisHosts("", "", "", ",", false)
 	if err != nil {
 		t.Errorf("Shouldn't have returned an error")
 	}
@@ -28,54 +28,44 @@ func TestLoadRedisHosts(t *testing.T) {
 
 func TestLoadCommandLineArgs(t *testing.T) {
 	tests := []struct {
-		addr, pwd, alias, sep            string
-		wantAddrs, wantPwds, wantAliases []string
+		addr, pwd, sep      string
+		wantAddrs, wantPwds []string
 	}{
 		{
-			addr:        "",
-			sep:         ",",
-			wantAddrs:   []string{"redis://localhost:6379"},
-			wantPwds:    []string{""},
-			wantAliases: []string{""},
+			addr:      "",
+			sep:       ",",
+			wantAddrs: []string{"redis://localhost:6379"},
+			wantPwds:  []string{""},
 		},
 		{
-			addr:        "redis://localhost:6379",
-			sep:         ",",
-			wantAddrs:   []string{"redis://localhost:6379"},
-			wantPwds:    []string{""},
-			wantAliases: []string{""},
+			addr:      "redis://localhost:6379",
+			sep:       ",",
+			wantAddrs: []string{"redis://localhost:6379"},
+			wantPwds:  []string{""},
 		},
 		{
-			addr:        "redis://localhost:6379,redis://localhost:7000",
-			sep:         ",",
-			wantAddrs:   []string{"redis://localhost:6379", "redis://localhost:7000"},
-			wantPwds:    []string{"", ""},
-			wantAliases: []string{"", ""},
+			addr:      "redis://localhost:6379,redis://localhost:7000",
+			sep:       ",",
+			wantAddrs: []string{"redis://localhost:6379", "redis://localhost:7000"},
+			wantPwds:  []string{"", ""},
 		},
 		{
-			addr:        "redis://localhost:6379,redis://localhost:7000,redis://localhost:7001",
-			sep:         ",",
-			wantAddrs:   []string{"redis://localhost:6379", "redis://localhost:7000", "redis://localhost:7001"},
-			wantPwds:    []string{"", "", ""},
-			wantAliases: []string{"", "", ""},
+			addr:      "redis://localhost:6379,redis://localhost:7000,redis://localhost:7001",
+			sep:       ",",
+			wantAddrs: []string{"redis://localhost:6379", "redis://localhost:7000", "redis://localhost:7001"},
+			wantPwds:  []string{"", "", ""},
 		},
 		{
-			alias:       "host-1",
-			sep:         ",",
-			wantAddrs:   []string{"redis://localhost:6379"},
-			wantPwds:    []string{""},
-			wantAliases: []string{"host-1"},
+			sep:       ",",
+			wantAddrs: []string{"redis://localhost:6379"},
+			wantPwds:  []string{""},
 		},
 	}
 
 	for _, test := range tests {
 		sep := test.sep
-		hosts := LoadCommandLineArgs(test.addr, test.pwd, test.alias, sep)
-		checkHosts(
-			t, hosts,
-			test.wantAddrs,
-			test.wantPwds,
-			test.wantAliases)
+		hosts := LoadCommandLineArgs(test.addr, test.pwd, sep)
+		checkHosts(t, hosts, test.wantAddrs, test.wantPwds)
 	}
 }
 
@@ -97,11 +87,10 @@ func TestLoadRedisFile(t *testing.T) {
 		t, hosts,
 		[]string{"redis://localhost:6379", "redis://localhost:7000", "redis://localhost:7000"},
 		[]string{"", "password", "second-pwd"},
-		[]string{"", "alias", ""},
 	)
 }
 
-func checkHosts(t *testing.T, hosts []RedisHost, addrs, pwds, aliases []string) {
+func checkHosts(t *testing.T, hosts []RedisHost, addrs, pwds []string) {
 	for _, addr := range addrs {
 		found := false
 		for _, host := range hosts {
@@ -126,20 +115,6 @@ func checkHosts(t *testing.T, hosts []RedisHost, addrs, pwds, aliases []string) 
 		}
 		if !found {
 			t.Errorf("Didn't find pwd: %s, got hosts: %#v", pwd, hosts)
-			return
-		}
-	}
-
-	for _, alias := range aliases {
-		found := false
-		for _, host := range hosts {
-			if host.Alias == alias {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("Didn't find alias: %s, got hosts: %#v", alias, hosts)
 			return
 		}
 	}
