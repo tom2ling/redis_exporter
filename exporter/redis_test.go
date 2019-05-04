@@ -988,13 +988,12 @@ func TestHTTPEndpoint(t *testing.T) {
 		"uptime_in_seconds",
 
 		// labels and label values
-		`addr="` + os.Getenv("TEST_REDIS_URI"),
 		`redis_mode`,
 		`standalone`,
 		`cmd="get"`,
 
-		`test_db_keys{addr="` + os.Getenv("TEST_REDIS_URI") + `",db="db11"} 11`,
-		`test_db_keys_expiring{addr="` + os.Getenv("TEST_REDIS_URI") + `",db="db11"} `,
+		`test_db_keys{db="db11"} 11`,
+		`test_db_keys_expiring{db="db11"} `,
 	}
 	for _, test := range tests {
 		if !strings.Contains(body, test) {
@@ -1038,13 +1037,12 @@ func TestHTTPScrapeEndpoint(t *testing.T) {
 		"uptime_in_seconds",
 
 		// labels and label values
-		`addr="` + os.Getenv("TEST_REDIS_URI"),
 		`redis_mode`,
 		`standalone`,
 		`cmd="get"`,
 
-		`test_db_keys{addr="` + os.Getenv("TEST_REDIS_URI") + `",db="db11"} 11`,
-		`test_db_keys_expiring{addr="` + os.Getenv("TEST_REDIS_URI") + `",db="db11"} `,
+		`test_db_keys{db="db11"} 11`,
+		`test_db_keys_expiring{db="db11"} `,
 	}
 	for _, want := range wants {
 		if !strings.Contains(body, want) {
@@ -1356,7 +1354,7 @@ func TestPasswordInvalid(t *testing.T) {
 		close(chM)
 	}()
 
-	want := `test_exporter_last_scrape_error{addr="` + os.Getenv("TEST_REDIS_URI") + `",err="dial redis: unknown network redis"} 1`
+	want := `test_exporter_last_scrape_error{err="dial redis: unknown network redis"} 1`
 	body := downloadURL(t, ts.URL+"/metrics")
 	if !strings.Contains(body, want) {
 		t.Errorf(`error, expected string "%s" in body, got body: \n\n%s`, want, body)
