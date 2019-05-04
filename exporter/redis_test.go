@@ -1162,7 +1162,7 @@ func TestMoreThanOneHost(t *testing.T) {
 			continue
 		}
 
-		for _ := range pb.GetLabel() {
+		for range pb.GetLabel() {
 			for lbl, val := range want {
 				if pb.GetGauge().GetValue() == val {
 					want[lbl] = -1
