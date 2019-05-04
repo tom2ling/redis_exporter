@@ -148,7 +148,7 @@ func resetSlowLog(t *testing.T, addr string) error {
 	return nil
 }
 
-func downloadUrl(t *testing.T, url string) string {
+func downloadURL(t *testing.T, url string) string {
 	log.Debugf("downloadURL() %s", url)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -242,7 +242,7 @@ func TestSlowLog(t *testing.T) {
 		close(chM)
 	}()
 
-	oldSlowLogId := float64(0)
+	oldSlowLogID := float64(0)
 
 	for m := range chM {
 		switch m := m.(type) {
@@ -251,7 +251,7 @@ func TestSlowLog(t *testing.T) {
 				got := &dto.Metric{}
 				m.Write(got)
 
-				oldSlowLogId = got.GetGauge().GetValue()
+				oldSlowLogID = got.GetGauge().GetValue()
 			}
 		}
 	}
@@ -274,7 +274,7 @@ func TestSlowLog(t *testing.T) {
 
 				val := got.GetGauge().GetValue()
 
-				if oldSlowLogId > val {
+				if oldSlowLogID > val {
 					t.Errorf("no new slowlogs found")
 				}
 			}
@@ -967,7 +967,7 @@ func TestHTTPEndpoint(t *testing.T) {
 	defer deleteKeysFromDB(t, os.Getenv("TEST_REDIS_URI"))
 	prometheus.Register(e)
 
-	body := downloadUrl(t, ts.URL+"/metrics")
+	body := downloadURL(t, ts.URL+"/metrics")
 
 	tests := []string{
 		// metrics
@@ -1018,7 +1018,7 @@ func TestHTTPScrapeEndpoint(t *testing.T) {
 	defer ts.Close()
 
 	u := fmt.Sprintf(ts.URL+"/?target=%s", os.Getenv("TEST_REDIS_URI"))
-	body := downloadUrl(t, u)
+	body := downloadURL(t, u)
 
 	wants := []string{
 		// metrics
@@ -1214,14 +1214,14 @@ func TestKeysReset(t *testing.T) {
 		close(chM)
 	}()
 
-	body := downloadUrl(t, ts.URL+"/metrics")
+	body := downloadURL(t, ts.URL+"/metrics")
 	if !strings.Contains(body, keys[0]) {
 		t.Errorf("Did not found key %q\n%s", keys[0], body)
 	}
 
 	deleteKeysFromDB(t, os.Getenv("TEST_REDIS_URI"))
 
-	body = downloadUrl(t, ts.URL+"/metrics")
+	body = downloadURL(t, ts.URL+"/metrics")
 	if strings.Contains(body, keys[0]) {
 		t.Errorf("Metric is present in metrics list %q\n%s", keys[0], body)
 	}
@@ -1252,7 +1252,7 @@ func TestClusterMaster(t *testing.T) {
 		close(chM)
 	}()
 
-	body := downloadUrl(t, ts.URL+"/metrics")
+	body := downloadURL(t, ts.URL+"/metrics")
 	log.Debugf("master - body: %s", body)
 	for _, want := range []string{
 		"test_instance_info{addr=\"redis://redis-cluster:7000\",alias=\"master\"",
@@ -1304,7 +1304,7 @@ func TestPasswordProtectedInstance(t *testing.T) {
 		close(chM)
 	}()
 
-	body := downloadUrl(t, ts.URL+"/metrics")
+	body := downloadURL(t, ts.URL+"/metrics")
 
 	if !strings.Contains(body, "test_up") {
 		t.Errorf("error, missing test_up")
@@ -1357,7 +1357,7 @@ func TestPasswordInvalid(t *testing.T) {
 	}()
 
 	want := `test_exporter_last_scrape_error{addr="` + os.Getenv("TEST_REDIS_URI") + `",alias="",err="dial redis: unknown network redis"} 1`
-	body := downloadUrl(t, ts.URL+"/metrics")
+	body := downloadURL(t, ts.URL+"/metrics")
 	if !strings.Contains(body, want) {
 		t.Errorf(`error, expected string "%s" in body, got body: \n\n%s`, want, body)
 	}
@@ -1388,7 +1388,7 @@ func TestClusterSlave(t *testing.T) {
 		close(chM)
 	}()
 
-	body := downloadUrl(t, ts.URL+"/metrics")
+	body := downloadURL(t, ts.URL+"/metrics")
 	log.Debugf("slave - body: %s", body)
 	for _, want := range []string{
 		"test_instance_info",

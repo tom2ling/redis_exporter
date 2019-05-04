@@ -547,16 +547,16 @@ func (e *Exporter) handleMetricsReplication(ch chan<- prometheus.Metric, host Re
 	}
 
 	// not a slave, try extracting master metrics
-	if slaveOffset, slaveIp, slavePort, slaveState, slaveLag, ok := parseConnectedSlaveString(fieldKey, fieldValue); ok {
+	if slaveOffset, slaveIP, slavePort, slaveState, slaveLag, ok := parseConnectedSlaveString(fieldKey, fieldValue); ok {
 		e.registerGaugeValue(ch, "connected_slave_offset", slaveOffset, []string{host.Addr, host.Alias,
-			slaveIp,
+			slaveIP,
 			slavePort,
 			slaveState,
 		})
 
 		if slaveLag > -1 {
 			e.registerGaugeValue(ch, "connected_slave_lag_seconds", slaveLag, []string{host.Addr, host.Alias,
-				slaveIp,
+				slaveIP,
 				slavePort,
 				slaveState,
 			})
@@ -992,19 +992,19 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric, host RedisHost) 
 	}
 
 	if values, err := redis.Values(c.Do("SLOWLOG", "GET", "1")); err == nil {
-		var slowlogLastId int64 = 0
-		var lastSlowExecutionDurationSeconds float64 = 0
+		var slowlogLastID int64
+		var lastSlowExecutionDurationSeconds float64
 
 		if len(values) > 0 {
 			if values, err = redis.Values(values[0], err); err == nil && len(values) > 0 {
-				slowlogLastId = values[0].(int64)
+				slowlogLastID = values[0].(int64)
 				if len(values) > 2 {
 					lastSlowExecutionDurationSeconds = float64(values[2].(int64)) / 1e6
 				}
 			}
 		}
 
-		e.registerGaugeValue(ch, "slowlog_last_id", float64(slowlogLastId), host.Label())
+		e.registerGaugeValue(ch, "slowlog_last_id", float64(slowlogLastID), host.Label())
 		e.registerGaugeValue(ch, "last_slow_execution_duration_seconds", lastSlowExecutionDurationSeconds, host.Label())
 	}
 
