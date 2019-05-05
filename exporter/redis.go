@@ -335,7 +335,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		up = 0
 		e.registerGaugeValue(ch, "scrape_error", 1.0, []string{fmt.Sprintf("%s", err)})
 	} else {
-		e.registerGaugeValue(ch, "scrape_error", 0, []string{})
+		e.registerGaugeValue(ch, "scrape_error", 0, []string{""})
 	}
 
 	e.registerGaugeValue(ch, "up", up, []string{})
