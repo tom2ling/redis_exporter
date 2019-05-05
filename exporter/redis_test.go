@@ -314,11 +314,10 @@ func TestSlowLog(t *testing.T) {
 	}
 }
 
-func setupDBKeys(t *testing.T, addr string) error {
-
-	c, err := redis.DialURL(addr)
+func setupDBKeys(t *testing.T, uri string) error {
+	c, err := redis.DialURL(uri)
 	if err != nil {
-		t.Errorf("couldn't setup redis, err: %s ", err)
+		t.Errorf("couldn't setup redis for uri %s, err: %s ", uri, err)
 		return err
 	}
 	defer c.Close()
@@ -1179,17 +1178,10 @@ func TestPasswordProtectedInstance(t *testing.T) {
 	ts := httptest.NewServer(promhttp.Handler())
 	defer ts.Close()
 
-	setupDBKeys(t, os.Getenv("TEST_PWD_REDIS_URI"))
+	uri := os.Getenv("TEST_PWD_REDIS_URI")
+	setupDBKeys(t, uri)
 
-	// set password for redis instance
-	c, err := redis.DialURL(os.Getenv("TEST_REDIS_URI"))
-	if err != nil {
-		t.Errorf("couldn't setup redis, err: %s ", err)
-		return
-	}
-	defer c.Close()
-
-	e, _ := NewRedisExporter(os.Getenv("TEST_PWD_REDIS_URI"), Options{Namespace: "test"})
+	e, _ := NewRedisExporter(uri, Options{Namespace: "test"})
 	prometheus.Register(e)
 
 	chM := make(chan prometheus.Metric, 10000)
@@ -1213,7 +1205,7 @@ func TestPasswordInvalid(t *testing.T) {
 	ts := httptest.NewServer(promhttp.Handler())
 	defer ts.Close()
 
-	testPwd := "p4$$w0rd"
+	testPwd := "redis-password"
 	uri := strings.Replace(os.Getenv("TEST_PWD_REDIS_URI"), testPwd, "wrong-pwd", -1)
 
 	e, _ := NewRedisExporter(uri, Options{Namespace: "test"})
