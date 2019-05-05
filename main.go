@@ -37,7 +37,7 @@ func getEnvBool(key string) (envValBool bool) {
 
 func main() {
 	var (
-		redisURI            = flag.String("redis.addr", getEnv("REDIS_ADDR", ""), "Address of one or more redis nodes, separated by separator")
+		redisAddr           = flag.String("redis.addr", getEnv("REDIS_ADDR", ""), "Address of the redis instsance to scrape")
 		namespace           = flag.String("namespace", getEnv("REDIS_EXPORTER_NAMESPACE", "redis"), "Namespace for metrics")
 		checkKeys           = flag.String("check-keys", getEnv("REDIS_EXPORTER_CHECK_KEYS", ""), "Comma separated list of key-patterns to export value and length/size, searched for with SCAN")
 		checkSingleKeys     = flag.String("check-single-keys", getEnv("REDIS_EXPORTER_CHECK_SINGLE_KEYS", ""), "Comma separated list of single keys to export value and length/size")
@@ -75,7 +75,7 @@ func main() {
 	}
 
 	exp, err := exporter.NewRedisExporter(
-		*redisURI,
+		*redisAddr,
 		exporter.Options{
 			Namespace:              *namespace,
 			ConfigCommandName:      *configCommand,
@@ -125,6 +125,6 @@ func main() {
 	})
 
 	log.Printf("Providing metrics at %s%s", *listenAddress, *metricPath)
-	log.Printf("Connecting to redis hosts: %#v", *redisURI)
+	log.Printf("Connecting to redis hosts: %#v", *redisAddr)
 	log.Fatal(http.ListenAndServe(*listenAddress, nil))
 }

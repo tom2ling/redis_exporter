@@ -19,11 +19,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type RedisHost struct {
-	Addr     string
-	Password string
-}
-
 type dbKeyPair struct {
 	db, key string
 }
@@ -36,7 +31,7 @@ type keyInfo struct {
 // Exporter implements the prometheus.Exporter interface, and exports Redis metrics.
 type Exporter struct {
 	sync.Mutex
-	redisURI   string
+	redisAddr  string
 	namespace  string
 	keys       []dbKeyPair
 	singleKeys []dbKeyPair
@@ -227,7 +222,7 @@ func newMetricDescr(namespace string, metricName string, docString string, label
 // NewRedisExporter returns a new exporter of Redis metrics.
 func NewRedisExporter(redisURI string, opts Options) (*Exporter, error) {
 	e := Exporter{
-		redisURI:  redisURI,
+		redisAddr: redisURI,
 		options:   opts,
 		namespace: opts.Namespace,
 
@@ -480,7 +475,6 @@ func (e *Exporter) extractConfigMetrics(ch chan<- prometheus.Metric, config []st
 		}
 
 		if val, err := strconv.ParseFloat(strVal, 64); err == nil {
-			// todo: this needs a test
 			e.registerGaugeValue(ch, fmt.Sprintf("config_%s", config[pos*2]), val)
 		}
 	}
@@ -562,10 +556,18 @@ func (e *Exporter) handleMetricsReplication(ch chan<- prometheus.Metric, fieldKe
 
 	// not a slave, try extracting master metrics
 	if slaveOffset, slaveIP, slavePort, slaveState, slaveLag, ok := parseConnectedSlaveString(fieldKey, fieldValue); ok {
-		e.registerGaugeValue(ch, "connected_slave_offset", slaveOffset, slaveIP, slavePort, slaveState)
+		e.registerGaugeValue(ch,
+			"connected_slave_offset",
+			slaveOffset,
+			slaveIP, slavePort, slaveState,
+		)
 
 		if slaveLag > -1 {
-			e.registerGaugeValue(ch, "connected_slave_lag_seconds", slaveLag, slaveIP, slavePort, slaveState)
+			e.registerGaugeValue(ch,
+				"connected_slave_lag_seconds",
+				slaveLag,
+				slaveIP, slavePort, slaveState,
+			)
 		}
 		return true
 	}
@@ -853,32 +855,30 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric) error {
 		}),
 	}
 
-	uri := e.redisURI
+	uri := e.redisAddr
 	if !strings.Contains(uri, "://") {
 		uri = "redis://" + uri
 	}
 	log.Debugf("Trying DialURL(): %s", uri)
 	c, err := redis.DialURL(uri, options...)
 	if err != nil {
-		addr := e.redisURI
-
 		log.Debugf("DialURL() failed, err: %s", err)
-		if frags := strings.Split(addr, "://"); len(frags) == 2 {
+		if frags := strings.Split(e.redisAddr, "://"); len(frags) == 2 {
 			log.Debugf("Trying: Dial(): %s %s", frags[0], frags[1])
 			c, err = redis.Dial(frags[0], frags[1], options...)
 		} else {
-			log.Debugf("Trying: Dial(): tcp %s", addr)
-			c, err = redis.Dial("tcp", addr, options...)
+			log.Debugf("Trying: Dial(): tcp %s", e.redisAddr)
+			c, err = redis.Dial("tcp", e.redisAddr, options...)
 		}
 	}
 
 	if err != nil {
-		log.Debugf("aborting for addr: %s - redis err: %s", e.redisURI, err)
+		log.Debugf("aborting for addr: %s - redis err: %s", e.redisAddr, err)
 		return err
 	}
 
 	defer c.Close()
-	log.Debugf("connected to: %s", e.redisURI)
+	log.Debugf("connected to: %s", e.redisAddr)
 
 	dbCount := 0
 
@@ -971,7 +971,6 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric) error {
 			continue
 		}
 		dbLabel := "db" + k.db
-
 		e.registerGaugeValue(ch, "key_sizes", info.size, dbLabel, k.key)
 
 		// Only record value metric if value is float-y
