@@ -14,7 +14,7 @@ services:
   - name: pwd-redis
     image: redis:5
     commands:
-      - /usr/local/bin/redis-server --port 6380 --requirepass yourpassword
+      - "/usr/local/bin/redis-server --port 6380 --requirepass p4$$w0rd"
     ports:
       - 6380
   - name: redis-cluster
