@@ -36,7 +36,7 @@ type keyInfo struct {
 // Exporter implements the prometheus.Exporter interface, and exports Redis metrics.
 type Exporter struct {
 	sync.Mutex
-	hosts      []RedisHost
+	redisURI   string
 	namespace  string
 	keys       []dbKeyPair
 	singleKeys []dbKeyPair
@@ -178,7 +178,7 @@ func (e *Exporter) ScrapeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	exp, _ := NewRedisExporter([]RedisHost{{Addr: target}}, e.options)
+	exp, _ := NewRedisExporter(target, e.options)
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(exp)
 	h := promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
@@ -223,9 +223,9 @@ func newMetricDescr(namespace string, metricName string, docString string, label
 }
 
 // NewRedisExporter returns a new exporter of Redis metrics.
-func NewRedisExporter(hosts []RedisHost, opts Options) (*Exporter, error) {
+func NewRedisExporter(redisURI string, opts Options) (*Exporter, error) {
 	e := Exporter{
-		hosts:     hosts,
+		redisURI:  redisURI,
 		options:   opts,
 		namespace: opts.Namespace,
 
@@ -325,7 +325,17 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	e.Lock()
 	defer e.Unlock()
 
-	e.scrapeAllHosts(ch)
+	now := time.Now().UnixNano()
+	var up float64 = 1
+	if err := e.scrapeRedisHost(ch); err != nil {
+		up = 0
+		e.registerGaugeValue(ch, "scrape_error", 1.0, []string{fmt.Sprintf("%s", err)})
+	} else {
+		e.registerGaugeValue(ch, "scrape_error", 0, []string{""})
+	}
+
+	e.registerGaugeValue(ch, "up", up, []string{})
+	e.registerGaugeValue(ch, "last_scrape_duration", float64(time.Now().UnixNano()-now)/1000000000, []string{})
 
 	ch <- e.totalScrapes
 }
@@ -437,7 +447,7 @@ func parseConnectedSlaveString(slaveName string, slaveInfo string) (offset float
 	return
 }
 
-func (e *Exporter) extractConfigMetrics(ch chan<- prometheus.Metric, config []string, host RedisHost) (dbCount int, err error) {
+func (e *Exporter) extractConfigMetrics(ch chan<- prometheus.Metric, config []string) (dbCount int, err error) {
 	if len(config)%2 != 0 {
 		return 0, fmt.Errorf("invalid config: %#v", config)
 	}
@@ -481,7 +491,7 @@ func (e *Exporter) registerMetricValue(ch chan<- prometheus.Metric, metric strin
 	ch <- prometheus.MustNewConstMetric(descr, valType, val, labels...)
 }
 
-func (e *Exporter) extractTile38Metrics(ch chan<- prometheus.Metric, info []string, host RedisHost) error {
+func (e *Exporter) extractTile38Metrics(ch chan<- prometheus.Metric, info []string) error {
 	for i := 0; i < len(info); i += 2 {
 		log.Debugf("tile38: %s:%s", info[i], info[i+1])
 
@@ -492,13 +502,13 @@ func (e *Exporter) extractTile38Metrics(ch chan<- prometheus.Metric, info []stri
 			continue
 		}
 
-		e.parseAndRegisterMetric(ch, host, fieldKey, fieldValue)
+		e.parseAndRegisterMetric(ch, fieldKey, fieldValue)
 	}
 
 	return nil
 }
 
-func (e *Exporter) handleMetricsCommandStats(ch chan<- prometheus.Metric, host RedisHost, fieldKey string, fieldValue string) {
+func (e *Exporter) handleMetricsCommandStats(ch chan<- prometheus.Metric, fieldKey string, fieldValue string) {
 	/*
 		Format:
 		cmdstat_get:calls=21,usec=175,usec_per_call=8.33
@@ -530,7 +540,7 @@ func (e *Exporter) handleMetricsCommandStats(ch chan<- prometheus.Metric, host R
 	e.registerMetricValue(ch, "commands_duration_seconds_total", usecTotal/1e6, prometheus.CounterValue, []string{cmd})
 }
 
-func (e *Exporter) handleMetricsReplication(ch chan<- prometheus.Metric, host RedisHost, fieldKey string, fieldValue string) bool {
+func (e *Exporter) handleMetricsReplication(ch chan<- prometheus.Metric, fieldKey string, fieldValue string) bool {
 	// only slaves have this field
 	if fieldKey == "master_link_status" {
 		if fieldValue == "up" {
@@ -554,7 +564,7 @@ func (e *Exporter) handleMetricsReplication(ch chan<- prometheus.Metric, host Re
 	return false
 }
 
-func (e *Exporter) handleMetricsServer(ch chan<- prometheus.Metric, host RedisHost, fieldKey string, fieldValue string) {
+func (e *Exporter) handleMetricsServer(ch chan<- prometheus.Metric, fieldKey string, fieldValue string) {
 	if fieldKey == "uptime_in_seconds" {
 		if uptime, err := strconv.ParseFloat(fieldValue, 64); err == nil {
 			e.registerGaugeValue(ch, "start_time_seconds", float64(time.Now().Unix())-uptime, []string{})
@@ -562,7 +572,7 @@ func (e *Exporter) handleMetricsServer(ch chan<- prometheus.Metric, host RedisHo
 	}
 }
 
-func (e *Exporter) extractInfoMetrics(ch chan<- prometheus.Metric, host RedisHost, info string, dbCount int) error {
+func (e *Exporter) extractInfoMetrics(ch chan<- prometheus.Metric, info string, dbCount int) error {
 	instanceInfo := map[string]string{}
 	slaveInfo := map[string]string{}
 	handledDBs := map[string]bool{}
@@ -597,15 +607,15 @@ func (e *Exporter) extractInfoMetrics(ch chan<- prometheus.Metric, host RedisHos
 		switch fieldClass {
 
 		case "Replication":
-			if ok := e.handleMetricsReplication(ch, host, fieldKey, fieldValue); ok {
+			if ok := e.handleMetricsReplication(ch, fieldKey, fieldValue); ok {
 				continue
 			}
 
 		case "Server":
-			e.handleMetricsServer(ch, host, fieldKey, fieldValue)
+			e.handleMetricsServer(ch, fieldKey, fieldValue)
 
 		case "Commandstats":
-			e.handleMetricsCommandStats(ch, host, fieldKey, fieldValue)
+			e.handleMetricsCommandStats(ch, fieldKey, fieldValue)
 			continue
 
 		case "Keyspace":
@@ -627,7 +637,7 @@ func (e *Exporter) extractInfoMetrics(ch chan<- prometheus.Metric, host RedisHos
 			continue
 		}
 
-		e.parseAndRegisterMetric(ch, host, fieldKey, fieldValue)
+		e.parseAndRegisterMetric(ch, fieldKey, fieldValue)
 	}
 
 	for dbIndex := 0; dbIndex < dbCount; dbIndex++ {
@@ -655,7 +665,7 @@ func (e *Exporter) extractInfoMetrics(ch chan<- prometheus.Metric, host RedisHos
 	return nil
 }
 
-func (e *Exporter) extractClusterInfoMetrics(ch chan<- prometheus.Metric, host RedisHost, info string) error {
+func (e *Exporter) extractClusterInfoMetrics(ch chan<- prometheus.Metric, info string) error {
 	lines := strings.Split(info, "\r\n")
 
 	for _, line := range lines {
@@ -672,13 +682,13 @@ func (e *Exporter) extractClusterInfoMetrics(ch chan<- prometheus.Metric, host R
 			continue
 		}
 
-		e.parseAndRegisterMetric(ch, host, fieldKey, fieldValue)
+		e.parseAndRegisterMetric(ch, fieldKey, fieldValue)
 	}
 
 	return nil
 }
 
-func (e *Exporter) parseAndRegisterMetric(ch chan<- prometheus.Metric, host RedisHost, fieldKey, fieldValue string) error {
+func (e *Exporter) parseAndRegisterMetric(ch chan<- prometheus.Metric, fieldKey, fieldValue string) error {
 	orgMetricName := sanitizeMetricName(fieldKey)
 	metricName := orgMetricName
 	if newName, ok := metricMapGauges[metricName]; ok {
@@ -823,7 +833,10 @@ func getKeysFromPatterns(c redis.Conn, keys []dbKeyPair) (expandedKeys []dbKeyPa
 	return expandedKeys, err
 }
 
-func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric, host RedisHost) error {
+func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric) error {
+
+	addr := e.redisURI
+
 	options := []redis.DialOption{
 		redis.DialConnectTimeout(5 * time.Second),
 		redis.DialReadTimeout(5 * time.Second),
@@ -834,36 +847,32 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric, host RedisHost) 
 		}),
 	}
 
-	if host.Password != "" {
-		options = append(options, redis.DialPassword(host.Password))
-	}
-
-	log.Debugf("Trying DialURL(): %s", host.Addr)
-	c, err := redis.DialURL(host.Addr, options...)
+	log.Debugf("Trying DialURL(): %s", addr)
+	c, err := redis.DialURL(addr, options...)
 
 	if err != nil {
 		log.Debugf("DialURL() failed, err: %s", err)
-		if frags := strings.Split(host.Addr, "://"); len(frags) == 2 {
+		if frags := strings.Split(addr, "://"); len(frags) == 2 {
 			log.Debugf("Trying: Dial(): %s %s", frags[0], frags[1])
 			c, err = redis.Dial(frags[0], frags[1], options...)
 		} else {
-			log.Debugf("Trying: Dial(): tcp %s", host.Addr)
-			c, err = redis.Dial("tcp", host.Addr, options...)
+			log.Debugf("Trying: Dial(): tcp %s", addr)
+			c, err = redis.Dial("tcp", addr, options...)
 		}
 	}
 
 	if err != nil {
-		log.Debugf("aborting for addr: %s - redis err: %s", host.Addr, err)
+		log.Debugf("aborting for addr: %s - redis err: %s", addr, err)
 		return err
 	}
 
 	defer c.Close()
-	log.Debugf("connected to: %s", host.Addr)
+	log.Debugf("connected to: %s", addr)
 
 	dbCount := 0
 
 	if config, err := redis.Strings(c.Do(e.options.ConfigCommandName, "GET", "*")); err == nil {
-		dbCount, err = e.extractConfigMetrics(ch, config, host)
+		dbCount, err = e.extractConfigMetrics(ch, config)
 		if err != nil {
 			log.Errorf("Redis CONFIG err: %s", err)
 			return err
@@ -884,7 +893,7 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric, host RedisHost) 
 
 	if isClusterEnabled {
 		if clusterInfo, err := redis.String(doRedisCmd(c, "CLUSTER", "INFO")); err == nil {
-			e.extractClusterInfoMetrics(ch, host, clusterInfo)
+			e.extractClusterInfoMetrics(ch, clusterInfo)
 
 			// in cluster mode Redis only supports one database so no extra padding beyond that needed
 			dbCount = 1
@@ -899,12 +908,12 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric, host RedisHost) 
 		}
 	}
 
-	e.extractInfoMetrics(ch, host, infoAll, dbCount)
+	e.extractInfoMetrics(ch, infoAll, dbCount)
 
 	// SERVER command only works on tile38 database. check the following link to
 	// find out more: https://tile38.com/
 	if serverInfo, err := redis.Strings(doRedisCmd(c, "SERVER")); err == nil {
-		e.extractTile38Metrics(ch, serverInfo, host)
+		e.extractTile38Metrics(ch, serverInfo)
 	} else {
 		log.Debugf("Tile38 SERVER err: %s", err)
 	}
@@ -997,31 +1006,4 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric, host RedisHost) 
 
 	log.Debugf("scrapeRedisHost() done")
 	return nil
-}
-
-func (e *Exporter) scrapeHost(ch chan<- prometheus.Metric, host RedisHost) {
-	now := time.Now().UnixNano()
-	var up float64 = 1
-	if err := e.scrapeRedisHost(ch, host); err != nil {
-		up = 0
-		e.registerGaugeValue(ch, "scrape_error", 1.0, []string{fmt.Sprintf("%s", err)})
-	} else {
-		e.registerGaugeValue(ch, "scrape_error", 0, []string{""})
-	}
-
-	e.registerGaugeValue(ch, "up", up, []string{})
-	e.registerGaugeValue(ch, "last_scrape_duration", float64(time.Now().UnixNano()-now)/1000000000, []string{})
-}
-
-func (e *Exporter) scrapeAllHosts(ch chan<- prometheus.Metric) {
-	e.totalScrapes.Inc()
-	wg := sync.WaitGroup{}
-	wg.Add(len(e.hosts))
-	for _, host := range e.hosts {
-		go func(h RedisHost) {
-			e.scrapeHost(ch, h)
-			wg.Done()
-		}(host)
-	}
-	wg.Wait()
 }
