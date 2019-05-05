@@ -22,7 +22,7 @@ func TestLoadRedisHosts(t *testing.T) {
 	}
 
 	if hosts[0].Addr != "redis://localhost:6379" {
-		t.Errorf("Wrong Addr, got: %s", hosts[0].Addr)
+		t.Errorf("Wrong addr, got: %s", hosts[0].Addr)
 	}
 }
 

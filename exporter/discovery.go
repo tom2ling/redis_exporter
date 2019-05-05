@@ -22,21 +22,13 @@ func LoadRedisHosts(redisAddr, redisPassword, redisFile, separator string, useCf
 		return LoadRedisFile(redisFile)
 	}
 
-	hosts := LoadCommandLineArgs(redisAddr, redisPassword, separator)
-	if len(hosts) == 0 {
-		return nil, fmt.Errorf("no hosts found")
-	}
-
-	return hosts, nil
+	return LoadCommandLineArgs(redisAddr, redisPassword, separator), nil
 }
 
 // loadRedisArgs loads the configuration for which redis hosts to monitor from either
 // the environment or as passed from program arguments. Returns the list of host addrs,
 // passwords.
 func LoadCommandLineArgs(addr, password, separator string) []RedisHost {
-	if addr == "" {
-		addr = "redis://localhost:6379"
-	}
 	var res []RedisHost
 	addrs := strings.Split(addr, separator)
 	passwords := strings.Split(password, separator)
@@ -45,7 +37,9 @@ func LoadCommandLineArgs(addr, password, separator string) []RedisHost {
 		if idx < len(passwords) {
 			pwd = passwords[idx]
 		}
-		res = append(res, RedisHost{Addr: addr, Password: pwd})
+		if addr != "" {
+			res = append(res, RedisHost{Addr: addr, Password: pwd})
+		}
 	}
 	return res
 }
@@ -71,7 +65,7 @@ func LoadRedisFile(fileName string) ([]RedisHost, error) {
 	for _, record := range records {
 		var addr, pwd string
 		switch len(record) {
-		case 2,3:
+		case 2, 3:
 			addr = record[0]
 			pwd = record[1]
 		case 1:
