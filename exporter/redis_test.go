@@ -1250,7 +1250,7 @@ func TestClusterSlave(t *testing.T) {
 	defer ts.Close()
 
 	addr := os.Getenv("TEST_REDIS_CLUSTER_SLAVE_URI")
-	e, _ := NewRedisExporter([]RedisHost{{Addr: addr}}, Options{Namespace: "test"})
+	e, _ := NewRedisExporter(addr, Options{Namespace: "test"})
 
 	prometheus.Register(e)
 

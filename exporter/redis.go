@@ -177,6 +177,8 @@ func (e *Exporter) ScrapeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// todo: allow passing check-keys?
+
 	start := time.Now()
 	exp, _ := NewRedisExporter(target, e.options)
 	registry := prometheus.NewRegistry()
@@ -318,6 +320,8 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 	}
 
 	ch <- e.totalScrapes.Desc()
+	ch <- e.targetScrapeDuration.Desc()
+	ch <- e.targetScrapeRequestErrors.Desc()
 }
 
 // Collect fetches new metrics from the RedisHost and updates the appropriate metrics.
@@ -331,13 +335,15 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		up = 0
 		e.registerGaugeValue(ch, "scrape_error", 1.0, []string{fmt.Sprintf("%s", err)})
 	} else {
-		e.registerGaugeValue(ch, "scrape_error", 0, []string{""})
+		e.registerGaugeValue(ch, "scrape_error", 0, []string{})
 	}
 
 	e.registerGaugeValue(ch, "up", up, []string{})
 	e.registerGaugeValue(ch, "last_scrape_duration", float64(time.Now().UnixNano()-now)/1000000000, []string{})
 
 	ch <- e.totalScrapes
+	ch <- e.targetScrapeDuration
+	ch <- e.targetScrapeRequestErrors
 }
 
 func includeMetric(s string) bool {
