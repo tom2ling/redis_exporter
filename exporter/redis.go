@@ -336,13 +336,13 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	var up float64 = 1
 	if err := e.scrapeRedisHost(ch); err != nil {
 		up = 0
-		e.registerGaugeValue(ch, "scrape_error", 1.0, []string{fmt.Sprintf("%s", err)})
+		e.registerGaugeValue(ch, "scrape_error", 1.0, fmt.Sprintf("%s", err))
 	} else {
-		e.registerGaugeValue(ch, "scrape_error", 0, []string{""})
+		e.registerGaugeValue(ch, "scrape_error", 0, "")
 	}
 
-	e.registerGaugeValue(ch, "up", up, []string{})
-	e.registerGaugeValue(ch, "last_scrape_duration", float64(time.Now().UnixNano()-now)/1000000000, []string{})
+	e.registerGaugeValue(ch, "up", up)
+	e.registerGaugeValue(ch, "last_scrape_duration", float64(time.Now().UnixNano()-now)/1000000000)
 
 	ch <- e.totalScrapes
 	ch <- e.targetScrapeDuration
@@ -481,17 +481,17 @@ func (e *Exporter) extractConfigMetrics(ch chan<- prometheus.Metric, config []st
 
 		if val, err := strconv.ParseFloat(strVal, 64); err == nil {
 			// todo: this needs a test
-			e.registerGaugeValue(ch, fmt.Sprintf("config_%s", config[pos*2]), val, []string{})
+			e.registerGaugeValue(ch, fmt.Sprintf("config_%s", config[pos*2]), val)
 		}
 	}
 	return
 }
 
-func (e *Exporter) registerGaugeValue(ch chan<- prometheus.Metric, metric string, val float64, labels []string) {
-	e.registerMetricValue(ch, metric, val, prometheus.GaugeValue, labels)
+func (e *Exporter) registerGaugeValue(ch chan<- prometheus.Metric, metric string, val float64, labels ...string) {
+	e.registerMetricValue(ch, metric, val, prometheus.GaugeValue, labels...)
 }
 
-func (e *Exporter) registerMetricValue(ch chan<- prometheus.Metric, metric string, val float64, valType prometheus.ValueType, labels []string) {
+func (e *Exporter) registerMetricValue(ch chan<- prometheus.Metric, metric string, val float64, valType prometheus.ValueType, labels ...string) {
 	descr := e.metricDescriptions[metric]
 	if descr == nil {
 		descr = newMetricDescr(e.options.Namespace, metric, metric+" metric", []string{})
@@ -545,27 +545,27 @@ func (e *Exporter) handleMetricsCommandStats(ch chan<- prometheus.Metric, fieldK
 	}
 
 	cmd := splitKey[1]
-	e.registerMetricValue(ch, "commands_total", calls, prometheus.CounterValue, []string{cmd})
-	e.registerMetricValue(ch, "commands_duration_seconds_total", usecTotal/1e6, prometheus.CounterValue, []string{cmd})
+	e.registerMetricValue(ch, "commands_total", calls, prometheus.CounterValue, cmd)
+	e.registerMetricValue(ch, "commands_duration_seconds_total", usecTotal/1e6, prometheus.CounterValue, cmd)
 }
 
 func (e *Exporter) handleMetricsReplication(ch chan<- prometheus.Metric, fieldKey string, fieldValue string) bool {
 	// only slaves have this field
 	if fieldKey == "master_link_status" {
 		if fieldValue == "up" {
-			e.registerGaugeValue(ch, "master_link_up", 1, []string{})
+			e.registerGaugeValue(ch, "master_link_up", 1)
 		} else {
-			e.registerGaugeValue(ch, "master_link_up", 0, []string{})
+			e.registerGaugeValue(ch, "master_link_up", 0)
 		}
 		return true
 	}
 
 	// not a slave, try extracting master metrics
 	if slaveOffset, slaveIP, slavePort, slaveState, slaveLag, ok := parseConnectedSlaveString(fieldKey, fieldValue); ok {
-		e.registerGaugeValue(ch, "connected_slave_offset", slaveOffset, []string{slaveIP, slavePort, slaveState})
+		e.registerGaugeValue(ch, "connected_slave_offset", slaveOffset, slaveIP, slavePort, slaveState)
 
 		if slaveLag > -1 {
-			e.registerGaugeValue(ch, "connected_slave_lag_seconds", slaveLag, []string{slaveIP, slavePort, slaveState})
+			e.registerGaugeValue(ch, "connected_slave_lag_seconds", slaveLag, slaveIP, slavePort, slaveState)
 		}
 		return true
 	}
@@ -576,7 +576,7 @@ func (e *Exporter) handleMetricsReplication(ch chan<- prometheus.Metric, fieldKe
 func (e *Exporter) handleMetricsServer(ch chan<- prometheus.Metric, fieldKey string, fieldValue string) {
 	if fieldKey == "uptime_in_seconds" {
 		if uptime, err := strconv.ParseFloat(fieldValue, 64); err == nil {
-			e.registerGaugeValue(ch, "start_time_seconds", float64(time.Now().Unix())-uptime, []string{})
+			e.registerGaugeValue(ch, "start_time_seconds", float64(time.Now().Unix())-uptime)
 		}
 	}
 }
@@ -631,11 +631,11 @@ func (e *Exporter) extractInfoMetrics(ch chan<- prometheus.Metric, info string, 
 			if keysTotal, keysEx, avgTTL, ok := parseDBKeyspaceString(fieldKey, fieldValue); ok {
 				dbName := fieldKey
 
-				e.registerGaugeValue(ch, "db_keys", keysTotal, []string{dbName})
-				e.registerGaugeValue(ch, "db_keys_expiring", keysEx, []string{dbName})
+				e.registerGaugeValue(ch, "db_keys", keysTotal, dbName)
+				e.registerGaugeValue(ch, "db_keys_expiring", keysEx, dbName)
 
 				if avgTTL > -1 {
-					e.registerGaugeValue(ch, "db_avg_ttl_seconds", avgTTL, []string{dbName})
+					e.registerGaugeValue(ch, "db_avg_ttl_seconds", avgTTL, dbName)
 				}
 				handledDBs[dbName] = true
 				continue
@@ -652,23 +652,23 @@ func (e *Exporter) extractInfoMetrics(ch chan<- prometheus.Metric, info string, 
 	for dbIndex := 0; dbIndex < dbCount; dbIndex++ {
 		dbName := "db" + strconv.Itoa(dbIndex)
 		if _, exists := handledDBs[dbName]; !exists {
-			e.registerGaugeValue(ch, "db_keys", 0, []string{dbName})
-			e.registerGaugeValue(ch, "db_keys_expiring", 0, []string{dbName})
+			e.registerGaugeValue(ch, "db_keys", 0, dbName)
+			e.registerGaugeValue(ch, "db_keys_expiring", 0, dbName)
 		}
 	}
 
-	e.registerGaugeValue(ch, "instance_info", 1, []string{
+	e.registerGaugeValue(ch, "instance_info", 1,
 		instanceInfo["role"],
 		instanceInfo["redis_version"],
 		instanceInfo["redis_build_id"],
 		instanceInfo["redis_mode"],
-		instanceInfo["os"]})
+		instanceInfo["os"])
 
 	if instanceInfo["role"] == "slave" {
-		e.registerGaugeValue(ch, "slave_info", 1, []string{
+		e.registerGaugeValue(ch, "slave_info", 1,
 			slaveInfo["master_host"],
 			slaveInfo["master_port"],
-			slaveInfo["slave_read_only"]})
+			slaveInfo["slave_read_only"])
 	}
 
 	return nil
@@ -731,7 +731,7 @@ func (e *Exporter) parseAndRegisterMetric(ch chan<- prometheus.Metric, fieldKey,
 	if metricMapCounters[orgMetricName] != "" {
 		t = prometheus.CounterValue
 	}
-	e.registerMetricValue(ch, metricName, val, t, []string{})
+	e.registerMetricValue(ch, metricName, val, t)
 
 	return nil
 }
@@ -843,9 +843,6 @@ func getKeysFromPatterns(c redis.Conn, keys []dbKeyPair) (expandedKeys []dbKeyPa
 }
 
 func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric) error {
-
-	addr := e.redisURI
-
 	options := []redis.DialOption{
 		redis.DialConnectTimeout(5 * time.Second),
 		redis.DialReadTimeout(5 * time.Second),
@@ -856,10 +853,15 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric) error {
 		}),
 	}
 
-	log.Debugf("Trying DialURL(): %s", addr)
-	c, err := redis.DialURL(addr, options...)
-
+	uri := e.redisURI
+	if !strings.Contains(uri, "://") {
+		uri = "redis://" + uri
+	}
+	log.Debugf("Trying DialURL(): %s", uri)
+	c, err := redis.DialURL(uri, options...)
 	if err != nil {
+		addr := e.redisURI
+
 		log.Debugf("DialURL() failed, err: %s", err)
 		if frags := strings.Split(addr, "://"); len(frags) == 2 {
 			log.Debugf("Trying: Dial(): %s %s", frags[0], frags[1])
@@ -871,12 +873,12 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric) error {
 	}
 
 	if err != nil {
-		log.Debugf("aborting for addr: %s - redis err: %s", addr, err)
+		log.Debugf("aborting for addr: %s - redis err: %s", e.redisURI, err)
 		return err
 	}
 
 	defer c.Close()
-	log.Debugf("connected to: %s", addr)
+	log.Debugf("connected to: %s", e.redisURI)
 
 	dbCount := 0
 
@@ -934,8 +936,8 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric) error {
 			var spikeLast, spikeDuration, max int64
 			if _, err := redis.Scan(latencyResult, &eventName, &spikeLast, &spikeDuration, &max); err == nil {
 				spikeDuration = spikeDuration / 1e6
-				e.registerGaugeValue(ch, "latency_spike_last", float64(spikeLast), []string{eventName})
-				e.registerGaugeValue(ch, "latency_spike_seconds", float64(spikeDuration), []string{eventName})
+				e.registerGaugeValue(ch, "latency_spike_last", float64(spikeLast), eventName)
+				e.registerGaugeValue(ch, "latency_spike_seconds", float64(spikeDuration), eventName)
 			}
 		}
 	}
@@ -970,11 +972,11 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric) error {
 		}
 		dbLabel := "db" + k.db
 
-		e.registerGaugeValue(ch, "key_sizes", info.size, []string{dbLabel, k.key})
+		e.registerGaugeValue(ch, "key_sizes", info.size, dbLabel, k.key)
 
 		// Only record value metric if value is float-y
 		if val, err := redis.Float64(c.Do("GET", k.key)); err == nil {
-			e.registerGaugeValue(ch, "key_values", val, []string{dbLabel, k.key})
+			e.registerGaugeValue(ch, "key_values", val, dbLabel, k.key)
 		}
 	}
 
@@ -986,14 +988,14 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric) error {
 		} else if kv != nil {
 			for key, stringVal := range kv {
 				if val, err := strconv.ParseFloat(stringVal, 64); err == nil {
-					e.registerGaugeValue(ch, "script_values", val, []string{key})
+					e.registerGaugeValue(ch, "script_values", val, key)
 				}
 			}
 		}
 	}
 
 	if reply, err := c.Do("SLOWLOG", "LEN"); err == nil {
-		e.registerGaugeValue(ch, "slowlog_length", float64(reply.(int64)), []string{})
+		e.registerGaugeValue(ch, "slowlog_length", float64(reply.(int64)))
 	}
 
 	if values, err := redis.Values(c.Do("SLOWLOG", "GET", "1")); err == nil {
@@ -1009,8 +1011,8 @@ func (e *Exporter) scrapeRedisHost(ch chan<- prometheus.Metric) error {
 			}
 		}
 
-		e.registerGaugeValue(ch, "slowlog_last_id", float64(slowlogLastID), []string{})
-		e.registerGaugeValue(ch, "last_slow_execution_duration_seconds", lastSlowExecutionDurationSeconds, []string{})
+		e.registerGaugeValue(ch, "slowlog_last_id", float64(slowlogLastID))
+		e.registerGaugeValue(ch, "last_slow_execution_duration_seconds", lastSlowExecutionDurationSeconds)
 	}
 
 	log.Debugf("scrapeRedisHost() done")
