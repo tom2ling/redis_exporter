@@ -1063,14 +1063,11 @@ func TestNonExistingHost(t *testing.T) {
 	want := map[string]float64{"test_exporter_last_scrape_error": 1.0, "test_exporter_scrapes_total": 1.0}
 
 	for m := range chM {
-
 		descString := m.Desc().String()
 		for k := range want {
 			if strings.Contains(descString, k) {
-
 				g := &dto.Metric{}
 				m.Write(g)
-
 				val := 0.0
 
 				if g.GetGauge() != nil {
@@ -1080,6 +1077,7 @@ func TestNonExistingHost(t *testing.T) {
 				} else {
 					continue
 				}
+
 				if val == want[k] {
 					want[k] = -1.0
 				}

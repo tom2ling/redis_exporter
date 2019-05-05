@@ -239,14 +239,16 @@ func NewRedisExporter(redisURI string, opts Options) (*Exporter, error) {
 
 		targetScrapeDuration: prometheus.NewSummary(
 			prometheus.SummaryOpts{
-				Name: "target_scrape_collection_duration_seconds",
-				Help: "Duration of collections by the SNMP exporter",
+				Namespace: opts.Namespace,
+				Name:      "target_scrape_collection_duration_seconds",
+				Help:      "Duration of collections by the SNMP exporter",
 			},
 		),
 		targetScrapeRequestErrors: prometheus.NewCounter(
 			prometheus.CounterOpts{
-				Name: "target_scrape_request_errors_total",
-				Help: "Errors in requests to the SNMP exporter",
+				Namespace: opts.Namespace,
+				Name:      "target_scrape_request_errors_total",
+				Help:      "Errors in requests to the SNMP exporter",
 			},
 		),
 	}
@@ -328,6 +330,7 @@ func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	e.Lock()
 	defer e.Unlock()
+	e.totalScrapes.Inc()
 
 	now := time.Now().UnixNano()
 	var up float64 = 1
